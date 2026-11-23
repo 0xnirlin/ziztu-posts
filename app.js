@@ -998,6 +998,6 @@
     const m = location.hash.match(/k=([A-Za-z0-9_-]+)/);
     if (m && (!DATA || m[1] !== LS.get("zc.key", null))) location.reload();
   });
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=50573ad459").catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=1f04ca8573").catch(() => {});
   start();
 })();
