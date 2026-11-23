@@ -334,6 +334,7 @@ main { padding: 4px var(--pad-r) calc(var(--tabbar) + var(--safe-b) + 28px) var(
 .vid-side .btn { padding: 0 12px; }
 .hint { font-size: 13px; color: var(--muted); margin: 8px 2px 0; line-height: 1.35; }
 .hint.c { text-align: center; }
+.alt-link { display: block; text-align: center; margin: 12px 0 2px; padding: 8px 0; font-size: 14px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
 .btn.did { background: var(--accent-soft-2); color: var(--accent-ink); }
 .ring { width: 56px; height: 56px; position: relative; display: grid; place-items: center; }
 .ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }

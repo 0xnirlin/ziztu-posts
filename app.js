@@ -641,17 +641,25 @@
         <button class="copy" data-copy="${k}" ${val ? "" : "disabled"} aria-label="Copy ${esc(name.toLowerCase())}">${I.copy}<span>Copy</span></button></div>
         <div class="val ${k === "kw" ? "kw" : ""} ${k === "caption" ? "clamp c6" : k === "dm" ? "clamp" : ""}">${val ? esc(val) : `<span class="missing">${miss}</span>`}</div>${extra}</div>`;
     const step = (n, title, sub = "") => `<div class="step-h"><span class="n">${n}</span><div><b>${title}</b>${sub ? `<span>${sub}</span>` : ""}</div></div>`;
+    // owner, 23 Nov: "can we add button in calendar that automatically open the post uploaded to instagram app". A web page can't hand a file to
+    // Instagram directly; the closest is one tap: the caption goes to the clipboard and the share sheet opens with the video, then Instagram > Reels.
+    // With that button, saving to Photos first is optional, so Save video becomes the quiet secondary button.
+    const igShare = !live && !isFB && !!p.v;
     const media = p.v
       ? `<div class="vid-row"><div class="media" id="media"><div class="pv" ${p.poster && POSTERS[p.poster] ? `style="background-image:url('${POSTERS[p.poster]}')"` : ""}></div><div class="load" id="load">${ring(0)}</div></div>
-          <div class="vid-side"><button class="btn pri block" id="save" disabled>${I.down}<span id="save-l">Loading…</span></button>
-          <p class="hint" id="save-hint">Opens the share sheet. Tap <b>Save Video</b> to put it in Photos.</p><p class="hint num">${Math.round(p.v.dur)} s · ${(p.v.size / 1e6).toFixed(1)} MB</p></div></div>`
+          <div class="vid-side"><button class="btn ${igShare ? "ghost" : "pri"} block" id="save" disabled>${I.down}<span id="save-l">Loading…</span></button>
+          <p class="hint" id="save-hint">${igShare ? "Only if you want a copy in Photos." : "Opens the share sheet. Tap <b>Save Video</b> to put it in Photos."}</p><p class="hint num">${Math.round(p.v.dur)} s · ${(p.v.size / 1e6).toFixed(1)} MB</p></div></div>`
       : p.imgs && p.imgs.length
         ? `<div class="gallery" id="gal">${p.imgs.map((im, i) => `<div class="g" data-i="${i}" style="background-image:url('${POSTERS[im.t] || ""}')"></div>`).join("")}</div>
           <button class="btn pri block" id="save" disabled>${I.down}<span id="save-l">Loading images…</span></button><p class="hint c">Opens the share sheet. Tap <b>Save ${p.imgs.length > 1 ? p.imgs.length + " Images" : "Image"}</b>.</p>`
         : `<div class="nomedia">${I.film}<div><b>Video not uploaded yet</b><span>It's still being prepared and shows up here soon.</span></div></div>`;
     const postBtn = live ? "" : isFB
       ? `<a class="btn pri block" id="go" href="${BUSINESS_SUITE}" target="_blank" rel="noopener">${I.out}<span>${p.caption ? "Copy caption & open Business Suite" : "Open Business Suite"}</span></a>`
-      : `<a class="btn pri block" id="go" href="${IG_APP}">${I.ig}<span>${p.caption ? "Copy caption & open Instagram" : "Open Instagram"}</span></a>`;
+      : igShare
+        ? `<button class="btn pri block" id="igs" disabled>${I.ig}<span id="igs-l">Loading video…</span></button>
+           <p class="hint" id="igs-hint">${p.caption ? "Copies the caption and opens the share sheet. Tap <b>Instagram</b>, pick <b>Reels</b>, then paste the caption." : "Opens the share sheet. Tap <b>Instagram</b>, then pick <b>Reels</b>."}</p>
+           <a class="alt-link" id="go" href="${IG_APP}">${p.caption ? "Or copy the caption and just open Instagram" : "Or just open Instagram"}</a>`
+        : `<a class="btn pri block" id="go" href="${IG_APP}">${I.ig}<span>${p.caption ? "Copy caption & open Instagram" : "Open Instagram"}</span></a>`;
     const hasReply = p.keyword || p.dm;
 
     sheetEl = document.createElement("section"); sheetEl.className = "sheet";
@@ -669,8 +677,8 @@
           <div class="cdline ${st}" id="sh-when">${whenLine(p, st)}</div>` : `<div class="cdline">No time set: post it whenever it fits.</div>`}
         ${auto ? `<div class="callout">${I.today}<span>${st === "posted" ? "Went out from the scheduler. Nothing to do." : "Already scheduled. It goes out on its own."}</span></div>` : ""}
 
-        <div class="step">${step(1, p.imgs && !p.v ? "Save the images" : "Save the video")}${media}</div>
-        <div class="step">${step(2, live ? "Caption" : isFB ? "Post on Facebook" : `Post from ${esc(acctName(from))}`, live ? "" : isFB ? "Upload it in Business Suite (Facebook only)." : `Pick the saved ${p.imgs && !p.v ? "images" : "video"}, then paste the caption.`)}
+        <div class="step">${step(1, igShare ? "The video" : p.imgs && !p.v ? "Save the images" : "Save the video")}${media}</div>
+        <div class="step">${step(2, live ? "Caption" : isFB ? "Post on Facebook" : `Post from ${esc(acctName(from))}`, live ? "" : isFB ? "Upload it in Business Suite (Facebook only)." : igShare ? "One tap sends the video to Instagram. Paste the caption there." : `Pick the saved ${p.imgs && !p.v ? "images" : "video"}, then paste the caption.`)}
           ${tips.length ? `<ul class="notes tips">${tips.map(([c, ic, tx]) => `<li class="${c}">${ic}<span>${tx}</span></li>`).join("")}</ul>` : ""}
           ${postBtn}
           ${field("caption", `Caption${tagCount ? ` <i>· ${tagCount} hashtags included</i>` : ""}`, p.caption, "No caption written yet", "", "Caption")}
@@ -730,7 +738,8 @@
     const me = sheetPost;
     const sheet = sheetEl;
     const load = $("#load", sheet), saveBtn = $("#save", sheet), saveL = $("#save-l", sheet);
-    const prog = (f) => { if (sheetPost !== me) return; load.innerHTML = ring(f); saveL.textContent = `Loading… ${Math.round(f * 100)}%`; };
+    const igs = $("#igs", sheet), igsL = $("#igs-l", sheet);
+    const prog = (f) => { if (sheetPost !== me) return; load.innerHTML = ring(f); saveL.textContent = `Loading… ${Math.round(f * 100)}%`; if (igsL) igsL.textContent = `Loading video… ${Math.round(f * 100)}%`; };
     const e = getBlob(p.v.f, "video/mp4", p.v.size, prog);
     e.pr.then((blob) => {
       e.listeners.delete(prog);
@@ -742,9 +751,11 @@
       const file = new File([blob], safeName(p.title) + ".mp4", { type: "video/mp4" });
       saveBtn.disabled = false; saveL.textContent = "Save video";
       saveBtn.onclick = () => shareFiles([file], saveBtn, "Save video");
+      if (igs) { igs.disabled = false; igsL.textContent = "Post to Instagram"; igs.onclick = () => shareToInstagram(p, file, igs); }
     }).catch((err) => {
       e.listeners.delete(prog);
       if (sheetPost !== me) return;
+      if (igs) { igs.disabled = true; igsL.textContent = "Video didn't load"; }
       const hint = $("#save-hint", sheet), was = hint.innerHTML;
       load.innerHTML = `<div class="lerr">${I.info}</div>`;
       hint.textContent = err && err.net ? "Couldn't download the video. Check the connection, then try again." : "This video didn't open. Try again.";
@@ -787,6 +798,22 @@
     });
     toast(files.length > 1 ? "Downloading the images…" : "Downloading the video…");
     $("span", btn).textContent = label;
+  }
+  // One tap: the caption goes to the clipboard, then the share sheet opens with the video (pick Instagram > Reels there).
+  // Both calls start inside the tap itself; nothing is awaited before navigator.share, or Safari refuses to open the sheet.
+  function shareToInstagram(p, file, btn) {
+    if (p.caption && !btn._copied) copyText(p.caption, $('[data-copy="caption"]', sheetEl), { quiet: true });
+    let can = false;
+    try { can = !!(navigator.canShare && navigator.share && navigator.canShare({ files: [file] })); } catch {}
+    if (!can) { toast(p.caption ? "Caption copied. This browser can't send the video to Instagram: use Save video." : "This browser can't send the video to Instagram: use Save video."); return; }
+    navigator.share({ files: [file] }).then(() => {
+      btn._copied = false; btn.classList.add("did"); $("span", btn).textContent = "Sent · send again";
+      toast(p.caption ? "In Instagram: pick Reels, then paste the caption." : "In Instagram: pick Reels.");
+    }).catch((e) => {
+      if (e && e.name === "AbortError") return;
+      if (e && e.name === "NotAllowedError") { btn._copied = !!p.caption; toast(p.caption ? "Caption copied. Tap Post to Instagram once more to open the share sheet." : "Tap Post to Instagram once more."); return; }
+      toast("The share sheet didn't open. Try again, or use Save video.");
+    });
   }
   async function copyText(text, btn, { quiet } = {}) {
     if (!text) return false;
@@ -998,6 +1025,6 @@
     const m = location.hash.match(/k=([A-Za-z0-9_-]+)/);
     if (m && (!DATA || m[1] !== LS.get("zc.key", null))) location.reload();
   });
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=924f60addf").catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=1333a3e4cd").catch(() => {});
   start();
 })();
