@@ -103,6 +103,7 @@
   function statusLabel(p, st) {
     if (st === "posted" && p.status === "scheduled" && !done[p.id]) return "Went out";
     if (st === "unscheduled" && (p.notes || []).some((n) => /hold/i.test(n))) return "On hold";
+    if (st === "unscheduled" && !p.caption) return "No caption";
     return STATUS_LABEL[st];
   }
 
@@ -636,6 +637,6 @@
     setInterval(() => { if (!sheetEl && S.view !== "today") render(); }, 60000);
     document.addEventListener("visibilitychange", () => { if (!document.hidden && !sheetEl) render(); });
   }
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=8daf801a53").catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=3bd80802ed").catch(() => {});
   start();
 })();
