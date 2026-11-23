@@ -12,17 +12,18 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Posts">
+<meta name="format-detection" content="telephone=no">
 <title>Ziztu Posts</title>
 <link rel="icon" href="icons/seal.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="styles.css?v=7ed4f61bcf">
+<link rel="stylesheet" href="styles.css?v=3c17255b34">
 </head>
 <body>
-<div id="app" aria-live="polite">
-  <div class="boot"><div class="seal-lg"></div></div>
+<div id="app">
+  <div class="boot"><div class="seal-lg"></div><p id="boot-msg">Opening…</p><div class="bar-p"><i id="boot-bar"></i></div></div>
 </div>
-<div id="toast" role="status"></div>
-<script src="app.js?v=7ed4f61bcf"></script>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="app.js?v=3c17255b34"></script>
 </body>
 </html>

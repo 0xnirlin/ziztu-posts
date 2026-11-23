@@ -2,6 +2,7 @@
   "name": "Ziztu Posts",
   "short_name": "Posts",
   "description": "Private posting calendar for getziztu, @rickmortyai and Facebook.",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#FFFFFF",
   "theme_color": "#5B4DFF",
