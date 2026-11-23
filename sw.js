@@ -1,5 +1,5 @@
 /* Service worker: app shell offline, encrypted assets cached once (their names never change). */
-const V = "cca0c8f41b";
+const V = "d5ccc9e016";
 const SHELL = "zc-shell-" + V;
 const ASSETS = "zc-assets-v1";
 const DATA = "zc-data-v1";
@@ -46,7 +46,21 @@ self.addEventListener("fetch", (e) => {
     })());
     return;
   }
-  // app shell: cache first, then network; navigations fall back to index.html
+  // pages: network first so a new build shows up at once; offline falls back to the cached shell
+  if (e.request.mode === "navigate" || rel === "" || rel === "index.html") {
+    e.respondWith((async () => {
+      const c = await caches.open(SHELL);
+      try {
+        const res = await fetch(e.request, { cache: "no-store" });
+        if (res.ok) c.put("index.html", res.clone());
+        return res;
+      } catch {
+        return (await c.match("index.html")) || (await c.match("./")) || Response.error();
+      }
+    })());
+    return;
+  }
+  // versioned app files: cache first, then network
   e.respondWith((async () => {
     const c = await caches.open(SHELL);
     const hit = await c.match(e.request, { ignoreSearch: e.request.mode === "navigate" });

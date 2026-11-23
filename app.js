@@ -323,11 +323,12 @@
     const tk = todayKey();
     S.selDay ||= tk;
     if (!S.calCursor) S.calCursor = tk.slice(0, 7);
-    let h = `<div class="cal-head">
-      <button class="cal-nav" id="c-prev" aria-label="Previous">${I.left}</button>
+    let h = `<div class="seg wide"><button data-m="month" class="${S.calMode === "month" ? "on" : ""}">Month</button><button data-m="week" class="${S.calMode === "week" ? "on" : ""}">Week</button></div>
+      <div class="cal-head">
       <h2 id="c-title"></h2>
-      <button class="cal-nav" id="c-next" aria-label="Next">${I.right}</button>
-      <div class="seg"><button data-m="month" class="${S.calMode === "month" ? "on" : ""}">Month</button><button data-m="week" class="${S.calMode === "week" ? "on" : ""}">Week</button></div></div>`;
+      <button class="cal-nav" id="c-today" aria-label="Go to today" style="width:auto;padding:0 10px;font-size:14px;font-weight:600;color:var(--accent-ink)">Today</button>
+      <button class="cal-nav" id="c-prev" aria-label="Previous">${I.left}</button>
+      <button class="cal-nav" id="c-next" aria-label="Next">${I.right}</button></div>`;
     if (S.calMode === "month") {
       const [y, mo] = S.calCursor.split("-").map(Number);
       const first = new Date(Date.UTC(y, mo - 1, 1));
@@ -339,16 +340,16 @@
         const d = new Date(Date.UTC(y, mo - 1, 1 - startDow + i));
         const k = d.toISOString().slice(0, 10);
         const list = (byDay.get(k) || []).sort(byTime);
-        const dots = list.slice(0, 6).map((p) => `<i class="dot ${p.accounts.length > 1 ? "ig" : p.accounts[0]}"></i>`).join("");
-        h += `<button class="cell ${d.getUTCMonth() !== mo - 1 ? "out" : ""} ${k === tk ? "today" : ""} ${k === S.selDay ? "sel" : ""}" data-k="${k}">
-          <span class="d num">${d.getUTCDate()}</span><span class="dots">${dots}</span>${list.length > 6 ? `<span class="more">+${list.length - 6}</span>` : ""}</button>`;
+        const dots = list.slice(0, 3).map((p) => `<i class="dot ${p.accounts.length > 1 ? "ig" : p.accounts[0]}"></i>`).join("");
+        h += `<button class="cell ${d.getUTCMonth() !== mo - 1 ? "out" : ""} ${k === tk ? "today" : ""} ${k === S.selDay ? "sel" : ""}" data-k="${k}" aria-label="${k}: ${list.length} posts">
+          <span class="d num">${d.getUTCDate()}</span><span class="dots">${dots}${list.length > 3 ? `<span class="more">+${list.length - 3}</span>` : ""}</span></button>`;
       }
       h += `</div>`;
       const sel = (byDay.get(S.selDay) || []).sort(byTime);
       h += sec(relDay(S.selDay) + " · " + dayLabel(keyToDate(S.selDay)), sel.length ? `${sel.length} post${sel.length > 1 ? "s" : ""}` : "");
       h += sel.length ? `<div class="list">${sel.map(rowHTML).join("")}</div>` : `<div class="empty">Nothing on this day.</div>`;
       m.innerHTML = h;
-      $("#c-title").textContent = F("UTC", { month: "long", year: "numeric" }).format(first);
+      $("#c-title").innerHTML = `${F("UTC", { month: "long" }).format(first)} <span>${y}</span>`;
       m.querySelectorAll(".cell").forEach((c) => c.addEventListener("click", () => { S.selDay = c.dataset.k; if (c.classList.contains("out")) S.calCursor = c.dataset.k.slice(0, 7); render(); }));
       $("#c-prev").onclick = () => { S.calCursor = shiftMonth(S.calCursor, -1); render(); };
       $("#c-next").onclick = () => { S.calCursor = shiftMonth(S.calCursor, 1); render(); };
@@ -371,6 +372,7 @@
       $("#c-prev").onclick = () => { S.selDay = new Date(keyToDate(S.selDay).getTime() - 7 * 864e5).toISOString().slice(0, 10); render(); };
       $("#c-next").onclick = () => { S.selDay = new Date(keyToDate(S.selDay).getTime() + 7 * 864e5).toISOString().slice(0, 10); render(); };
     }
+    $("#c-today").onclick = () => { S.selDay = tk; S.calCursor = tk.slice(0, 7); render(); };
     m.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => { S.calMode = b.dataset.m; LS.set("zc.calMode", S.calMode); S.calCursor = S.selDay.slice(0, 7); render(); }));
   }
   function shiftMonth(c, n) { const [y, m] = c.split("-").map(Number); const d = new Date(Date.UTC(y, m - 1 + n, 1)); return d.toISOString().slice(0, 7); }
@@ -405,7 +407,7 @@
     sheetEl = document.createElement("section"); sheetEl.className = "sheet"; sheetEl.setAttribute("role", "dialog"); sheetEl.setAttribute("aria-modal", "true");
     const ms = t(p);
     const fields = [
-      ["Caption", p.caption, "caption", "Caption missing"],
+      ["Caption · with hashtags", p.caption, "caption", "Caption missing"],
       ["Hashtags", p.hashtags, "tags", "No hashtags"],
       ["Comment keyword", p.keyword, "kw", "No keyword"],
       ["DM reply", p.dm, "dm", p.keyword ? "DM reply missing" : "No DM reply"],
@@ -634,6 +636,6 @@
     setInterval(() => { if (!sheetEl && S.view !== "today") render(); }, 60000);
     document.addEventListener("visibilitychange", () => { if (!document.hidden && !sheetEl) render(); });
   }
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=cca0c8f41b").catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=d5ccc9e016").catch(() => {});
   start();
 })();
