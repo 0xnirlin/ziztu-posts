@@ -636,6 +636,6 @@
     setInterval(() => { if (!sheetEl && S.view !== "today") render(); }, 60000);
     document.addEventListener("visibilitychange", () => { if (!document.hidden && !sheetEl) render(); });
   }
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=d5ccc9e016").catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=6083aa7724").catch(() => {});
   start();
 })();

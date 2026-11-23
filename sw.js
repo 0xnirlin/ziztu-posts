@@ -1,5 +1,5 @@
 /* Service worker: app shell offline, encrypted assets cached once (their names never change). */
-const V = "d5ccc9e016";
+const V = "6083aa7724";
 const SHELL = "zc-shell-" + V;
 const ASSETS = "zc-assets-v1";
 const DATA = "zc-data-v1";
@@ -51,7 +51,7 @@ self.addEventListener("fetch", (e) => {
     e.respondWith((async () => {
       const c = await caches.open(SHELL);
       try {
-        const res = await fetch(e.request, { cache: "no-store" });
+        const res = await fetch(e.request.url, { cache: "no-store", credentials: "same-origin" }); // a navigate Request can't take an init
         if (res.ok) c.put("index.html", res.clone());
         return res;
       } catch {
