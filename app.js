@@ -1646,7 +1646,7 @@
     // a new build's worker takes over at once (skipWaiting + claim): offer a reload so the new screens show
     const hadWorker = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadWorker && DATA) toast("A new version is ready", { label: "Reload", fn: () => location.reload() }); });
-    navigator.serviceWorker.register("sw.js?v=579e4b32ab").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=4cb43e46cb").catch(() => {});
   }
   start();
 })();
