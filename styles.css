@@ -519,3 +519,16 @@ html.sheet-open, body.sheet-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* install as an app (PWA): iPhone's two taps */
+dialog.inst { border: 0; padding: 0; border-radius: var(--r); background: var(--sheet); color: var(--ink); width: min(92vw, 380px); max-width: none; box-shadow: var(--shadow-lg); }
+dialog.inst::backdrop { background: var(--scrim); }
+.inst-b { padding: 22px 20px 18px; }
+.inst-ic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-ink); margin-bottom: 12px; }
+.inst-ic svg { width: 24px; height: 24px; }
+dialog.inst h3 { margin: 0 0 10px; font-size: 19px; line-height: 1.25; }
+dialog.inst ol { margin: 0 0 12px; padding-left: 20px; line-height: 1.5; color: var(--ink-2); }
+dialog.inst li { margin: 4px 0; }
+.inst-share { display: inline-flex; vertical-align: -4px; color: var(--accent-ink); }
+.inst-share svg { width: 20px; height: 20px; }
+dialog.inst p { margin: 0 0 16px; color: var(--muted); font-size: 14px; line-height: 1.4; }

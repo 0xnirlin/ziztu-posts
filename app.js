@@ -45,6 +45,8 @@
     grid: svg('<rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/>'),
     send: svg('<path d="M21 3 10.5 13.5M21 3l-6.5 18-4-7.5L3 9.5z"/>'),
     plus: svg('<path d="M12 6v12M6 12h12"/>', 'stroke-width="2.4"'),
+    share: svg('<path d="M12 15V3.5M8 7.5l4-4 4 4"/><path d="M8.5 10.5H7a2 2 0 0 0-2 2V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6.5a2 2 0 0 0-2-2h-1.5"/>'),
+    app: svg('<rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M10.5 18h3"/>'),
     play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.9l10.2-6.5a1 1 0 0 0 0-1.7L9.5 4.6A1 1 0 0 0 8 5.5z"/></svg>',
   };
 
@@ -1335,6 +1337,45 @@
     return true;
   }
 
+  // ---------------------------------------------------------------- install as an app (PWA)
+  // Owner, 24 Nov: "make it pwa too". Android and desktop Chrome hand us a real install prompt (beforeinstallprompt);
+  // iPhone Safari has no install API, so we show its two taps instead. Nothing shows once it runs as an app.
+  const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  let installEvt = null;
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; });
+  window.addEventListener("appinstalled", () => { installEvt = null; LS.set("zc.installed", true); toast("Installed. Open Posts from your home screen."); });
+  const canInstall = () => !isStandalone() && !!(installEvt || isIOS);
+  async function installApp() {
+    if (installEvt) {
+      const e = installEvt; installEvt = null;
+      try { await e.prompt(); const c = await e.userChoice; if (c && c.outcome === "accepted") LS.set("zc.installed", true); } catch {}
+      return;
+    }
+    iosInstallSteps();
+  }
+  function iosInstallSteps() {
+    const d = document.createElement("dialog"); d.className = "inst"; d.setAttribute("aria-labelledby", "inst-h");
+    d.innerHTML = `<div class="inst-b"><div class="inst-ic">${I.app}</div><h3 id="inst-h">Add Posts to your Home Screen</h3>
+      <ol><li>Tap <b>Share</b> <span class="inst-share">${I.share}</span> in Safari's toolbar.</li>
+      <li>Scroll down, tap <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>
+      <p>It opens full screen like an app, with its own icon. Type your password once inside it.</p>
+      <button class="btn pri block" type="button">Got it</button></div>`;
+    d.querySelector("button").addEventListener("click", () => d.close());
+    d.addEventListener("click", (e) => { if (e.target === d) d.close(); }); // a tap outside the card closes it
+    d.addEventListener("close", () => d.remove());
+    document.body.appendChild(d); d.showModal();
+  }
+  // a one-time nudge in a phone browser, a few seconds after the calendar opens
+  function installHint() {
+    if (LS.get("zc.installHint", false) || LS.get("zc.installed", false)) return;
+    setTimeout(() => {
+      if (!canInstall() || sheetEl) return;
+      LS.set("zc.installHint", true);
+      toast("Use Posts as an app on this phone", { label: installEvt ? "Install" : "How", fn: installApp });
+    }, 4000);
+  }
+
   // ---------------------------------------------------------------- menu
   let menuOff = null;
   function closeMenu() { $(".menu")?.remove(); if (menuOff) { document.removeEventListener("click", menuOff, true); menuOff = null; } $("#b-more")?.setAttribute("aria-expanded", "false"); }
@@ -1350,6 +1391,7 @@
       ${S.cal === "formats"
         ? `<button role="menuitem" data-act="freset" ${flocal ? "" : "disabled"}>${I.close}Clear my picks and “sent” marks${flocal ? ` (${flocal})` : ""}</button>`
         : `<button role="menuitem" data-act="reset" ${local ? "" : "disabled"}>${I.close}Clear my “posted” marks${local ? ` (${local})` : ""}</button>`}
+      ${canInstall() ? `<hr><button role="menuitem" data-act="install">${I.app}Install as an app</button>` : ""}
       <hr><button role="menuitem" data-act="lock">${I.key}Lock this phone</button>
       <button role="menuitem" data-act="link">${I.link}Copy private link (no password needed)</button>
       <small class="info">Updated ${esc(DATA.built)} · ${DATA.posts.length} posts · ${FMT().length} formats</small>`;
@@ -1359,6 +1401,7 @@
     setTimeout(() => document.addEventListener("click", menuOff, true));
     m.querySelectorAll("[data-th]").forEach((b) => b.addEventListener("click", () => { LS.set("zc.theme", b.dataset.th); applyTheme(); closeMenu(); }));
     m.querySelector('[data-act="refresh"]').addEventListener("click", () => { closeMenu(); refreshData(true); });
+    m.querySelector('[data-act="install"]')?.addEventListener("click", () => { closeMenu(); installApp(); });
     m.querySelector('[data-act="freset"]')?.addEventListener("click", () => {
       closeMenu();
       if (!confirm("Clear every pick and “sent” mark you set on this phone?")) return;
@@ -1583,6 +1626,7 @@
     keyStr = k;
     shell();
     if (!applyRoute(route)) render();
+    installHint();
     fetchPosters().then(() => { render(); setTimeout(prefetchHero, 800); });
     // keep countdowns and statuses current without rebuilding the page for nothing
     setInterval(() => { if (!sheetEl && DATA && statusSig() !== sig) render(); }, 30000);
@@ -1594,6 +1638,11 @@
     if (m && (!DATA || m[1] !== LS.get("zc.key", null))) { location.reload(); return; }
     if (DATA && $("#main")) applyRoute(hashParams()); // #formats, #format=<id>, #posts while the app is open
   });
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=2c5760403b").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    // a new build's worker takes over at once (skipWaiting + claim): offer a reload so the new screens show
+    const hadWorker = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadWorker && DATA) toast("A new version is ready", { label: "Reload", fn: () => location.reload() }); });
+    navigator.serviceWorker.register("sw.js?v=6ef8cc54ef").catch(() => {});
+  }
   start();
 })();
