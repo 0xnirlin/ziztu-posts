@@ -1,5 +1,5 @@
 /* Service worker: app shell offline, encrypted assets cached once (their names never change). */
-const V = "df0bfbae10";
+const V = "37b6957ba5";
 const SHELL = "zc-shell-" + V;
 const ASSETS = "zc-assets-v1";
 const DATA = "zc-data-v1";
