@@ -238,6 +238,7 @@ main { padding: 4px var(--pad-r) calc(var(--tabbar) + var(--safe-b) + 28px) var(
 .dot.ig { background: var(--accent); }
 .dot.rick { background: var(--ink); }
 .dot.fb { background: transparent; box-shadow: inset 0 0 0 2px var(--muted); }
+.chip .dot2 { margin-left: -4px; }  /* the Instagram chip shows both accounts' dots */
 
 .pill { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 3px 9px; white-space: nowrap; line-height: 1.35; }
 .pill.to_post { background: var(--accent-soft); color: var(--accent-ink); }

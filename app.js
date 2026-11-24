@@ -197,13 +197,14 @@
   }
 
   // ---------------------------------------------------------------- filtering
-  const ACCT_NAME = { ig: "getziztu", rick: "@rickmortyai", fb: "Facebook" };
+  const ACCT_NAME = { ig: "getziztu", rick: "@rickmortyai", fb: "Facebook", insta: "Instagram" };
   const acctName = (a) => ACCT_NAME[a] || a;
   const primaryAcct = (p) => (p.accounts.includes("rick") ? "rick" : p.accounts.includes("ig") ? "ig" : p.accounts[0]);
   const acctHTML = (p) => p.accounts.map((a) => `<span class="acct"><i class="dot ${esc(a)}"></i>${esc(acctName(a))}</span>`).join("");
   const statusOn = () => S.status !== "all" && (S.view !== "today" || !!S.q);
+  const inSel = (p) => S.acct === "all" || (S.acct === "insta" ? p.accounts.some((a) => a === "ig" || a === "rick") : p.accounts.includes(S.acct));
   function matches(p, { status = true } = {}) {
-    if (S.acct !== "all" && !p.accounts.includes(S.acct)) return false;
+    if (!inSel(p)) return false;
     if (status && statusOn() && statusGroup(statusOf(p)) !== S.status) return false;
     if (S.q) {
       const hay = [p.title, p.series, p.keyword, p.caption, p.dm, (p.notes || []).join(" "), p.accounts.map(acctName).join(" ")].join(" ").toLowerCase();
@@ -296,13 +297,13 @@
     $("#chips").hidden = false;
     if (S.cal === "formats") { fchips(); return; }
     const all = DATA.posts;
-    const inAcct = (p) => S.acct === "all" || p.accounts.includes(S.acct);
+    const inAcct = inSel;
     const counts = {};
     for (const p of all) if (inAcct(p)) { const g = statusGroup(statusOf(p)); counts[g] = (counts[g] || 0) + 1; }
-    const accts = [["all", "All"], ["ig", "getziztu"], ["rick", "@rickmortyai"], ["fb", "Facebook"]];
+    const accts = [["all", "All"], ["insta", "Instagram"], ["fb", "Facebook"], ["ig", "getziztu"], ["rick", "@rickmortyai"]];
     const el = $("#chips");
     el.innerHTML =
-      accts.map(([k, l]) => `<button class="chip ${S.acct === k ? "on" : ""}" data-a="${k}" aria-pressed="${S.acct === k}">${k !== "all" ? `<i class="dot ${k}"></i>` : ""}${l}</button>`).join("") +
+      accts.map(([k, l]) => `<button class="chip ${S.acct === k ? "on" : ""}" data-a="${k}" aria-pressed="${S.acct === k}">${k === "all" ? "" : k === "insta" ? `<i class="dot ig"></i><i class="dot rick dot2"></i>` : `<i class="dot ${k}"></i>`}${l}</button>`).join("") +
       (S.view === "today" && !S.q ? "" : `<span class="chip-sep" aria-hidden="true"></span>` +
       STATUS_CHIPS.map(([k, l]) => `<button class="chip ${S.status === k ? "on" : ""}" data-s="${k}" aria-pressed="${S.status === k}">${l}<span class="ct num">${counts[k] || 0}</span></button>`).join(""));
     const on = $(".chip.on[data-s]", el);
@@ -487,7 +488,10 @@
     const posts = visible().sort(byTime);
     let h = filterNote();
     if (!posts.length) { m.innerHTML = h + emptyFilter(); return; }
-    // what already went out before now folds away; anything still open stays in view
+    // asked for Posted: the posted list IS the point, so all of it, newest day first, nothing folded
+    // (owner, 24 Nov: "I can't see all"; the fold below hid every one of them behind "Show 19 already posted")
+    if (statusOn() && S.status === "posted") { m.innerHTML = h + grouped(posts.slice().reverse()); return; }
+    // otherwise what already went out before now folds away; anything still open stays in view
     const gone = (p) => p.at && t(p) < now() && statusOf(p) === "posted";
     const nGone = posts.filter(gone).length;
     const shown = S.open.past ? posts : posts.filter((p) => !gone(p));
@@ -1642,7 +1646,7 @@
     // a new build's worker takes over at once (skipWaiting + claim): offer a reload so the new screens show
     const hadWorker = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadWorker && DATA) toast("A new version is ready", { label: "Reload", fn: () => location.reload() }); });
-    navigator.serviceWorker.register("sw.js?v=6ef8cc54ef").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=ddddf767dd").catch(() => {});
   }
   start();
 })();
