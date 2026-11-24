@@ -1500,6 +1500,6 @@
     if (m && (!DATA || m[1] !== LS.get("zc.key", null))) { location.reload(); return; }
     if (DATA && $("#main")) applyRoute(hashParams()); // #formats, #format=<id>, #posts while the app is open
   });
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=fef25c075c").catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=c4432eadb6").catch(() => {});
   start();
 })();
