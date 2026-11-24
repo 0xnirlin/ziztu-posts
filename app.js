@@ -1,5 +1,6 @@
 /* Ziztu Posts: private content calendar. Everything under a/ is AES-GCM encrypted;
-   the key comes from the private link (#k=...) and stays on this device. */
+   the key comes from the password (unwrapping a/kw) or the private link (#k=...), and
+   stays on this device. */
 (() => {
   "use strict";
   const $ = (s, el = document) => el.querySelector(s);
@@ -64,6 +65,7 @@
   // ---------------------------------------------------------------- crypto + network
   const b64u = {
     dec(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), (c) => c.charCodeAt(0)); },
+    enc(u8) { let s = ""; for (const b of u8) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); },
   };
   let KEY = null;
   let servedOffline = false;
@@ -1309,7 +1311,7 @@
     });
   }
 
-  // ---- deep links: #formats, #format=<id>, #posts (next to #k=...). Applied once, then the URL goes back to #k=...
+  // ---- deep links: #formats, #format=<id>, #posts (maybe next to #k=...). Applied once, then the URL is the clean one
   function hashParams() {
     const o = {};
     for (const part of location.hash.replace(/^#/, "").split("&")) {
@@ -1323,8 +1325,7 @@
   function applyRoute(r) {
     const has = (k) => Object.prototype.hasOwnProperty.call(r, k);
     if (!has("format") && !has("formats") && !has("posts")) return false;
-    const k = keyStr || LS.get("zc.key", "");
-    history.replaceState(null, "", location.pathname + location.search + (k ? "#k=" + k : ""));
+    history.replaceState(null, "", location.pathname + location.search);
     if (sheetEl) closeSheet(true);
     const want = has("posts") ? "posts" : "formats";
     if (want !== S.cal) { S.cal = want; LS.set("zc.cal", want); clearSearch(); }
@@ -1349,7 +1350,8 @@
       ${S.cal === "formats"
         ? `<button role="menuitem" data-act="freset" ${flocal ? "" : "disabled"}>${I.close}Clear my picks and “sent” marks${flocal ? ` (${flocal})` : ""}</button>`
         : `<button role="menuitem" data-act="reset" ${local ? "" : "disabled"}>${I.close}Clear my “posted” marks${local ? ` (${local})` : ""}</button>`}
-      <button role="menuitem" data-act="lock">${I.key}Forget the key on this phone</button>
+      <hr><button role="menuitem" data-act="lock">${I.key}Lock this phone</button>
+      <button role="menuitem" data-act="link">${I.link}Copy private link (no password needed)</button>
       <small class="info">Updated ${esc(DATA.built)} · ${DATA.posts.length} posts · ${FMT().length} formats</small>`;
     document.body.appendChild(m);
     $("#b-more").setAttribute("aria-expanded", "true");
@@ -1371,7 +1373,20 @@
       done = {}; undone = {}; savedMarks(); render();
       toast("Cleared your marks", { label: "Undo", fn: () => { [done, undone] = JSON.parse(snap); savedMarks(); render(); } });
     });
-    m.querySelector('[data-act="lock"]').addEventListener("click", () => { closeMenu(); if (confirm("Forget the key on this phone? You'll need the private link to open the calendar again.")) { LS.del("zc.key"); history.replaceState(null, "", location.pathname + location.search); location.reload(); } });
+    m.querySelector('[data-act="lock"]').addEventListener("click", async () => {
+      closeMenu();
+      // with no password set up yet (no a/kw), locking means the private link is the only way back in
+      const hasPw = await fetch("a/kw?t=" + Date.now(), { cache: "no-store" }).then((r) => r.ok, () => true);
+      if (!confirm(hasPw ? "Lock this phone? You'll need your password to open it again." : "Lock this phone? No password is set up yet, so you'll need the private link to open it again.")) return;
+      LS.del("zc.key"); memKey = null; KEY = null;
+      history.replaceState(null, "", location.pathname + location.search); location.reload();
+    });
+    // the key link opens the calendar for anyone who has it, with no password: never shown on screen
+    m.querySelector('[data-act="link"]').addEventListener("click", async () => {
+      closeMenu();
+      if (!keyStr || !confirm("This link opens the calendar without a password, for anyone who has it. Copy it, and keep it somewhere private?")) return;
+      if (await copyText(location.origin + location.pathname + "#k=" + keyStr, null)) toast("Private link copied. Keep it private.");
+    });
   }
 
   let toastT = null;
@@ -1393,29 +1408,95 @@
     $("#boot-bar").style.transform = `scaleX(${f == null ? 0 : f})`;
     b.classList.toggle("det", f != null);
   }
-  function lock(err) {
-    app.innerHTML = `<div class="lock">
+  // ---- password login. a/kw is the data key wrapped under the password: PBKDF2-HMAC-SHA256 (salt and
+  // rounds from the file, 1,000,000 today) gives a key that AES-GCM-decrypts it (AAD "ziztu-posts/kw/v1").
+  // SECURITY: a/kw sits on a PUBLIC Pages repo, so anyone can download it and guess offline. The only
+  // barriers are the password's strength (tools/set_password.py takes 8+ characters, warns below 12)
+  // and PBKDF2's cost. A wrong password and a damaged file look the same here, by design.
+  const KW_AAD = new TextEncoder().encode("ziztu-posts/kw/v1");
+  let memKey = null; // "Remember on this phone" off: the key lives in this page only, for this visit
+  let retry = null;  // a key that hasn't loaded yet (the network failed): "Try again" uses it, with its Remember choice
+  async function unwrapKey(kw, pw) {
+    const salt = b64u.dec(kw.salt), iv = b64u.dec(kw.iv), ct = b64u.dec(kw.ct);
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw.normalize("NFC")), "PBKDF2", false, ["deriveKey"]);
+    const t0 = performance.now();
+    const kek = await crypto.subtle.deriveKey({ name: "PBKDF2", hash: "SHA-256", salt, iterations: kw.iter }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    let raw;
+    try { raw = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: KW_AAD }, kek, ct)); } catch { raw = null; }
+    console.info(`zc: password checked in ${Math.round(performance.now() - t0)} ms`);
+    return raw && raw.length === 32 ? raw : null;
+  }
+  function login(err) {
+    const rem = LS.get("zc.remember", true) !== false;
+    app.innerHTML = `<form class="lock login" id="lg" autocomplete="on" novalidate>
       <div class="seal-lg still"></div>
       <h1>Ziztu Posts</h1>
-      <p>This calendar is private. Open it with your private link, or paste the link here.</p>
-      ${err ? `<div class="err" role="alert">${esc(err)}</div>` : ""}
-      <input id="lk" type="url" inputmode="url" placeholder="Paste the private link" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Private link">
-      <button class="btn pri block" id="lk-go">Open</button></div>`;
-    const go = () => {
-      const v = $("#lk").value.trim(); const m = v.match(/[#&]k=([A-Za-z0-9_-]+)/) || v.match(/^([A-Za-z0-9_-]{40,})$/);
-      if (!m) { lock(v ? "That isn't the private link. It ends in #k= followed by a long code." : "Paste the private link first."); return; }
-      history.replaceState(null, "", location.pathname + location.search + "#k=" + m[1]); start();
+      <p>Type your password to open the calendar.</p>
+      <div class="err" id="lg-err" role="alert" ${err ? "" : "hidden"}>${esc(err || "")}</div>
+      <input type="text" name="username" autocomplete="username" value="ziztu" hidden aria-hidden="true" tabindex="-1">
+      <div class="pw">
+        <input id="pw" name="password" type="password" autocomplete="current-password" autofocus required enterkeyhint="go"
+          autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Password" aria-label="Password" aria-describedby="lg-err">
+        <button type="button" class="pw-eye" id="pw-eye" aria-controls="pw" aria-pressed="false" aria-label="Show password">Show</button>
+      </div>
+      <label class="remember"><input type="checkbox" id="rem" ${rem ? "checked" : ""}><span>Remember on this phone</span></label>
+      <button class="btn pri block" type="submit" id="lg-go"><span id="lg-l">Open calendar</span></button>
+      <p class="foot">Forgot it? Set a new one on your Mac with set_password.</p>
+    </form>`;
+    const form = $("#lg"), pw = $("#pw"), go = $("#lg-go"), eye = $("#pw-eye");
+    let busy = false;
+    const fail = (msg) => {
+      const e = $("#lg-err"); e.textContent = msg; e.hidden = false;
+      pw.setAttribute("aria-invalid", "true");
+      pw.focus(); pw.select();
     };
-    $("#lk-go").addEventListener("click", go);
-    $("#lk").addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    const setBusy = (on) => {
+      busy = on; go.disabled = on; pw.readOnly = on; form.setAttribute("aria-busy", String(on));
+      go.classList.toggle("busy", on);
+      $("#lg-l").textContent = on ? "Opening…" : "Open calendar";
+    };
+    eye.addEventListener("click", () => {
+      const show = pw.type === "password";
+      pw.type = show ? "text" : "password";
+      eye.textContent = show ? "Hide" : "Show";
+      eye.setAttribute("aria-pressed", String(show));
+      eye.setAttribute("aria-label", show ? "Hide password" : "Show password");
+      pw.focus();
+    });
+    pw.addEventListener("input", () => pw.removeAttribute("aria-invalid"));
+    $("#rem").addEventListener("change", (e) => LS.set("zc.remember", e.target.checked));
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (busy) return; // one check at a time: a double tap on Go doesn't start a second derivation
+      const v = pw.value, remember = $("#rem").checked;
+      if (!v) { fail("Type your password first."); return; }
+      const link = v.trim().match(/[#&]k=([A-Za-z0-9_-]{40,})/); // a pasted private link still works here
+      if (link) { start({ key: link[1], remember }); return; }
+      setBusy(true);
+      let kw;
+      try {
+        const res = await fetch("a/kw?t=" + Date.now(), { cache: "no-store" });
+        if (res.status === 404) { setBusy(false); fail("No password is set up yet. Open the calendar once with your private link."); return; }
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        kw = await res.json();
+      } catch { setBusy(false); failNet(); return; }
+      const ok = kw && kw.v === 1 && kw.kdf === "pbkdf2-sha256" && Number.isInteger(kw.iter) && kw.iter >= 100000 && kw.iter <= 10000000 && kw.salt && kw.iv && kw.ct;
+      if (!ok) { setBusy(false); fail("The password file on the site isn't readable. Set the password again on your Mac."); return; }
+      let raw;
+      try { raw = await unwrapKey(kw, v); } catch { raw = null; }
+      if (!raw) { setBusy(false); fail("Wrong password"); return; }
+      start({ key: b64u.enc(raw), remember });
+    });
+    requestAnimationFrame(() => pw.focus());
   }
   function failNet() {
+    const saved = !!(retry || memKey || LS.get("zc.key", null));
     app.innerHTML = `<div class="lock">
       <div class="seal-lg still"></div>
       <h1>Can't reach the calendar</h1>
-      <p>${navigator.onLine ? "The connection dropped while loading." : "This phone is offline."} Your key is still saved, so it opens as soon as you're back online.</p>
+      <p>${navigator.onLine ? "The connection dropped while loading." : "This phone is offline."} ${saved ? "Your key is still saved, so it opens as soon as you're back online." : "Try again when you're back online."}</p>
       <button class="btn pri block" id="again">Try again</button></div>`;
-    $("#again").addEventListener("click", start);
+    $("#again").addEventListener("click", () => start(retry || {}));
   }
 
   function loadPosters(json) {
@@ -1460,12 +1541,20 @@
     } catch { if (force) toast("Couldn't check for new posts. Try again in a moment."); }
   }
 
-  async function start() {
+  // Where the key comes from, in order: the password just typed (login), a private #k= link (old links and
+  // old home-screen apps keep working), this visit's memory (Remember off), the saved one (zc.key).
+  async function start(opt = {}) {
     const route = hashParams();
     const m = location.hash.match(/[#&]k=([A-Za-z0-9_-]+)/);
-    const k = m ? m[1] : LS.get("zc.key", null);
-    if (!k) { lock(); return; }
-    if (!m) history.replaceState(history.state, "", location.pathname + location.search + "#k=" + k); // keep the key in the URL for Add to Home Screen
+    const stored = LS.get("zc.key", null);
+    const src = opt.key ? "typed" : m ? "link" : memKey ? "memory" : stored ? "saved" : null;
+    const k = opt.key || (m && m[1]) || memKey || stored;
+    if (!k) { login(); return; }
+    const save = src === "typed" ? opt.remember !== false : src !== "memory";
+    retry = null;
+    // the URL without the key: any route (#formats, #format=<id>, #posts) stays for applyRoute
+    const rest = location.hash.replace(/^#/, "").split("&").filter((x) => x && !/^k=/.test(x)).join("&");
+    const clean = location.pathname + location.search + (rest ? "#" + rest : "");
     boot("Unlocking your calendar…", 0);
     const slow = setTimeout(() => boot("Still loading. The connection is slow…"), 4000);
     try {
@@ -1473,18 +1562,23 @@
       const d = await fetchEnc("d", (f) => boot("Unlocking your calendar…", f));
       DATA = JSON.parse(new TextDecoder().decode(d));
       lastFetch = now();
-      LS.set("zc.key", k);
     } catch (e) {
       clearTimeout(slow);
       console.error(e);
-      if (e && e.net) { failNet(); return; }
-      const stored = LS.get("zc.key", null);
-      if (m && stored && stored !== k) { history.replaceState(null, "", location.pathname + location.search + "#k=" + stored); start(); return; }
-      if (stored === k) LS.del("zc.key");
-      lock("This link's key doesn't open the calendar. Use the newest private link.");
+      if (e && e.net) { retry = src === "saved" ? null : { key: k, remember: save }; failNet(); return; }
+      KEY = null;
+      if (src === "link" && stored && stored !== k) { history.replaceState(null, "", clean); start(); return; }
+      if (src === "saved" || stored === k) LS.del("zc.key");
+      if (src === "memory") memKey = null;
+      if (src === "link") history.replaceState(null, "", clean); // that key is wrong: don't let it win over a typed password
+      login(src === "typed" ? "The password is right, but the calendar's key changed. Set the password again on your Mac."
+        : src === "link" ? "This link's key doesn't open the calendar. Type your password, or use the newest private link."
+        : null);
       return;
     }
     clearTimeout(slow);
+    if (save) { LS.set("zc.key", k); memKey = null; } else memKey = k;
+    history.replaceState(null, "", clean); // the key never stays in the address bar, or in a new Add to Home Screen
     boot("Unlocking your calendar…", 1);
     keyStr = k;
     shell();
@@ -1500,6 +1594,6 @@
     if (m && (!DATA || m[1] !== LS.get("zc.key", null))) { location.reload(); return; }
     if (DATA && $("#main")) applyRoute(hashParams()); // #formats, #format=<id>, #posts while the app is open
   });
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=c4432eadb6").catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=2c5760403b").catch(() => {});
   start();
 })();

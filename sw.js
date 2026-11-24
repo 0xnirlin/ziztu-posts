@@ -1,5 +1,5 @@
 /* Service worker: app shell offline, encrypted assets cached once (their names never change). */
-const V = "c4432eadb6";
+const V = "2c5760403b";
 const SHELL = "zc-shell-" + V;
 const ASSETS = "zc-assets-v1";
 const DATA = "zc-data-v1";
@@ -33,8 +33,9 @@ self.addEventListener("fetch", (e) => {
   const base = self.registration.scope.replace(location.origin, "");
   const rel = path.startsWith(base) ? path.slice(base.length) : path;
 
-  // the two small encrypted index files: network first, saved copy when offline or the server errors
-  if (rel === "a/d" || rel === "a/p") {
+  // the two small encrypted index files, and a/kw (the password-wrapped key, so a new password
+  // takes effect at once): network first, saved copy when offline or the server errors
+  if (rel === "a/d" || rel === "a/p" || rel === "a/kw") {
     e.respondWith((async () => {
       const c = await caches.open(DATA);
       try {
